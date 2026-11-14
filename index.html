@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Simulador de Live - v5</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: Arial, Helvetica, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+
+  .hud {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; z-index: 2; pointer-events: none;
+  }
+  .stat {
+    background: linear-gradient(180deg, #ffffff, #f1e9ff); color: #333;
+    border-radius: 16px; padding: 8px 12px; min-width: 92px; text-align: center;
+    box-shadow: 0 4px 0 #444, 0 6px 12px rgba(0,0,0,0.25);
+  }
+  .stat span { display: block; font-size: 1.4rem; font-weight: bold; }
+  .stat small { display: block; font-size: 0.7rem; color: #666; font-weight: normal; }
+
+  #ganho, #aviso, #dica {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    color: white; background: rgba(20,10,40,0.6); padding: 6px 14px;
+    border-radius: 14px; z-index: 2; pointer-events: none;
+    width: max-content; max-width: 92vw; text-align: center;
+  }
+  #ganho { top: 100px; font-size: 0.8rem; }
+  #aviso { top: 131px; font-size: 0.9rem; }
+  #dica { bottom: 215px; display: none; font-size: 0.95rem; }
+
+  #chat {
+    position: fixed; left: 10px; top: 170px; width: min(250px, 46vw);
+    background: rgba(20,10,40,0.5); color: white; border-radius: 14px;
+    padding: 8px; z-index: 2; font-size: 0.78rem; pointer-events: none;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+  }
+  #chatTopo { font-weight: bold; margin-bottom: 4px; }
+  #chatLinhas { min-height: 110px; }
+  #chatLinhas .linha { margin: 3px 0; line-height: 1.25; }
+  #chatLinhas .doacao { color: #ffd54a; font-weight: bold; }
+  #chatLinhas .voce { color: #9ff3ff; }
+  #chatLinhas .sistema { opacity: 0.75; font-style: italic; }
+  #respostas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .resposta {
+    pointer-events: auto; font-size: 0.7rem; border: none; border-radius: 10px;
+    padding: 5px 7px; background: white; color: #333; cursor: pointer;
+    box-shadow: 0 2px 0 #bbb;
+  }
+
+  #flutuantes {
+    position: fixed; top: 38%; left: 0; width: 100%; height: 0;
+    z-index: 3; pointer-events: none;
+  }
+  .flutuante {
+    position: absolute; top: 0; transform: translateX(-50%);
+    font-weight: bold; font-size: 1.15rem; white-space: nowrap;
+    text-shadow: 2px 2px 0 #000; animation: subir 1.3s ease-out forwards;
+  }
+  @keyframes subir {
+    0% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -70px) scale(1.15); }
+  }
+
+  #controles {
+    position: fixed; bottom: 20px; left: 16px; z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(3, 56px);
+    grid-template-rows: repeat(3, 56px);
+    gap: 6px;
+  }
+  .seta {
+    width: 56px; height: 56px; font-size: 1.4rem; border: none; border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(230,220,255,0.85));
+    color: #333; box-shadow: 0 4px 0 #777;
+    touch-action: none; cursor: pointer;
+  }
+  .seta:active { transform: translateY(3px); box-shadow: 0 1px 0 #777; }
+
+  #btnAcao {
+    position: fixed; bottom: 30px; right: 20px; width: 100px; height: 100px; z-index: 2;
+    border: none; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff19a, #f1c40f 60%, #d4ac0d);
+    color: #333; font-size: 1.2rem; font-weight: bold; box-shadow: 0 6px 0 #b7950b;
+    touch-action: none; cursor: pointer;
+  }
+  #btnAcao:active { transform: translateY(4px); box-shadow: 0 2px 0 #b7950b; }
+
+  #btnMini {
+    position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2;
+    border: none; border-radius: 14px;
+    background: linear-gradient(180deg, #af7ac5, #8e44ad);
+    color: white; font-size: 0.95rem; font-weight: bold; padding: 10px 12px;
+    box-shadow: 0 5px 0 #6c3483; cursor: pointer;
+  }
+
+  #btnConfig {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 2;
+    width: 56px; height: 56px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.9); font-size: 1.5rem;
+    box-shadow: 0 4px 0 #777; cursor: pointer;
+  }
+  #btnConfig:active { transform: translateX(-50%) translateY(3px); box-shadow: 0 1px 0 #777; }
+
+  .painel-modal {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 5; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(10,5,25,0.6); padding: 16px;
+  }
+  .caixa-modal {
+    background: white; color: #333; border-radius: 22px; padding: 18px;
+    width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto;
+    text-align: center; box-shadow: 0 8px 0 #444, 0 12px 24px rgba(0,0,0,0.35);
+    border: 3px solid #ffffff;
+  }
+  .caixa-modal h2 { margin: 0 0 8px; color: #5b2c6f; }
+  #textoCategoria, #mgInfo { font-size: 0.95rem; margin: 6px 0 12px; }
+  .tut-texto { font-size: 1.05rem; line-height: 1.4; min-height: 90px; }
+  .tut-prog { font-size: 0.8rem; color: #888; margin: 4px 0 0; }
+  .cartoes { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+  .secao { width: 100%; font-weight: bold; font-size: 1.05rem; margin: 14px 0 0; color: #5b2c6f; }
+  .cartao {
+    width: 210px; background: #f5f0ff; border-radius: 16px;
+    padding: 12px; box-shadow: 0 5px 0 #bbb; transition: transform 0.15s;
+  }
+  .cartao h3 { margin: 0 0 6px; font-size: 1.1rem; }
+  .cartao p { margin: 4px 0; font-size: 0.9rem; }
+  .cartao p.req { font-weight: bold; color: #8e44ad; }
+  .barra { height: 10px; background: #ddd; border-radius: 6px; overflow: hidden; margin: 6px 0; }
+  .barra div { height: 100%; width: 100%; background: #2ecc71; transition: width 0.3s; }
+
+  .comprar, .btn-fechar, #btnEncerrar, .btn-secundario, .btn-perigo {
+    margin-top: 8px; font-size: 0.95rem; font-weight: bold;
+    border: none; border-radius: 12px; padding: 9px 14px; cursor: pointer;
+  }
+  .comprar {
+    color: white; background: linear-gradient(180deg, #5dade2, #2e86c1);
+    box-shadow: 0 4px 0 #21618c;
+  }
+  .comprar:disabled {
+    background: linear-gradient(180deg, #bbb, #999); box-shadow: 0 4px 0 #666; cursor: not-allowed;
+  }
+  .btn-fechar {
+    margin-top: 16px; font-size: 1.05rem; padding: 12px 28px; color: white;
+    background: #7f8c8d; box-shadow: 0 5px 0 #566061;
+  }
+  #btnEncerrar {
+    display: none; margin-top: 14px; color: white;
+    background: linear-gradient(180deg, #ec7063, #c0392b); box-shadow: 0 4px 0 #922b21;
+  }
+  .btn-secundario {
+    color: #333; background: #ecf0f1; box-shadow: 0 4px 0 #bdc3c7;
+  }
+  .btn-perigo {
+    margin-top: 16px; color: white; background: #c0392b; box-shadow: 0 4px 0 #922b21;
+  }
+
+  @media (hover: hover) {
+    .cartao:hover { transform: translateY(-2px); }
+    .comprar:hover:not(:disabled), .btn-fechar:hover, .btn-secundario:hover, .btn-perigo:hover {
+      filter: brightness(1.08);
+    }
+  }
+
+  #mgArea {
+    position: relative; width: 100%; height: 300px; overflow: hidden;
+    background: linear-gradient(#bfe9ff, #e8f8ff); border-radius: 16px;
+    margin: 10px 0; touch-action: none;
+  }
+  .item-mg {
+    position: absolute; font-size: 2rem; transform: translateX(-50%);
+    cursor: pointer; user-select: none;
+  }
+  .alvo-mg {
+    position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px;
+    border-radius: 50%; background: #e74c3c; color: white; font-size: 1.8rem;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 5px 0 #922b21; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="hud">
+  <div class="stat">Seguidores<span id="seguidores">0</span></div>
+  <div class="stat">Moedas<span id="moedas">0</span></div>
+  <div class="stat">Nível<span id="nivelNum">⭐ 1</span><small id="nivelFaltam"></small></div>
+</div>
+<div id="ganho"></div>
+<div id="aviso">Você está na rua. Toque em AÇÃO para começar uma live com o celular!</div>
+<div id="dica"></div>
+<div id="flutuantes"></div>
+
+<div id="chat">
+  <div id="chatTopo">💬 Chat · 👀 0</div>
+  <div id="chatLinhas"></div>
+  <div id="respostas">
+    <button class="resposta" data-texto="Obrigado! 💜">Obrigado! 💜</button>
+    <button class="resposta" data-texto="Bora jogar?">Bora jogar?</button>
+    <button class="resposta" data-texto="Vocês são demais!">Vocês são demais!</button>
+  </div>
+</div>
+
+<div id="controles">
+  <button class="seta" data-dir="cima" style="grid-column: 2; grid-row: 1;">▲</button>
+  <button class="seta" data-dir="esquerda" style="grid-column: 1; grid-row: 2;">◀</button>
+  <button class="seta" data-dir="direita" style="grid-column: 3; grid-row: 2;">▶</button>
+  <button class="seta" data-dir="baixo" style="grid-column: 2; grid-row: 3;">▼</button>
+</div>
+
+<button id="btnAcao">AÇÃO</button>
+<button id="btnMini">🎮 Minigames</button>
+<button id="btnConfig" title="Configurações">⚙️</button>
+
+<div class="painel-modal" id="lojaPainel">
+  <div class="caixa-modal">
+    <h2>🛒 Loja</h2>
+    <div class="cartoes" id="cartoes"></div>
+    <button class="btn-fechar" data-fechar>Fechar loja</button>
+  </div>
+</div>
+
+<div class="painel-modal" id="categoriaPainel">
+  <div class="caixa-modal">
+    <h2>🎥 Live</h2>
+    <p id="textoCategoria"></p>
+    <div class="cartoes" id="cartoesCategoria"></div>
+    <button id="btnEncerrar">⏹ Encerrar live</button>
+    <br>
+    <button class="btn-fechar" data-fechar>Fechar</button>
+  </div>
+</div>
+
+<div class="painel-modal" id="minigamePainel">
+  <div class="caixa-modal">
+    <h2>🎮 Minigames</h2>
+    <p id="mgInfo">Escolha um minigame para jogar enquanto a live continua!</p>
+    <div id="mgArea"></div>
+    <div class="cartoes">
+      <button class="comprar" id="mgMoedas">🪙 Pega-moedas (20 s)</button>
+      <button class="comprar" id="mgAlvo">🎯 Toque no alvo (15 s)</button>
+    </div>
+    <button class="btn-fechar" data-fechar>Fechar</button>
+  </div>
+</div>
+
+<div class="painel-modal" id="tutorialPainel">
+  <div class="caixa-modal">
+    <h2 id="tutTitulo"></h2>
+    <p id="tutTexto" class="tut-texto"></p>
+    <p id="tutProgresso" class="tut-prog"></p>
+    <div class="cartoes">
+      <button class="btn-secundario" id="tutPular">Pular</button>
+      <button class="comprar" id="tutProximo">Próximo</button>
+    </div>
+  </div>
+</div>
+
+<div class="painel-modal" id="configPainel">
+  <div class="caixa-modal">
+    <h2>⚙️ Configurações</h2>
+    <p>Seu progresso é salvo automaticamente neste navegador.</p>
+    <div class="cartoes">
+      <button class="comprar" id="btnSom">🔊 Som: ligado</button>
+      <button class="comprar" id="btnVerTutorial">📖 Ver tutorial</button>
+    </div>
+    <button class="btn-perigo" id="btnApagar">🗑️ Apagar progresso</button>
+    <br>
+    <button class="btn-fechar" data-fechar>Fechar</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+  // ===== Equipamentos (só funcionam dentro de casa) =====
+  const equipamentos = {
+    camera: {
+      nome: "📷 Câmera HD", precoBase: 20, nivel: 0, nivelMax: 5,
+      descricao: "Cada nível: +1 seguidor por ciclo"
+    },
+    microfone: {
+      nome: "🎤 Microfone", precoBase: 40, nivel: 0, nivelMax: 5,
+      descricao: "Cada nível: +2 moedas por ciclo"
+    },
+    luz: {
+      nome: "💡 Luz de LED", precoBase: 60, nivel: 0, nivelMax: 5,
+      descricao: "Cada nível: +1 seguidor e +1 moeda por ciclo"
+    },
+    teclado: {
+      nome: "⌨️ Teclado mecânico", precoBase: 30, nivel: 0, nivelMax: 5,
+      descricao: "Cada nível: +1 moeda por ciclo e +1 moeda por acerto nos minigames"
+    },
+    computador: {
+      nome: "🖥️ Computador gamer", precoBase: 150, nivel: 0, nivelMax: 5,
+      descricao: "Cada nível: +2 seguidores por ciclo"
+    }
+  };
+  const PRECO_CASA = 180;
+
+  // ===== Tipos de live =====
+  const categorias = {
+    jogos: {
+      nome: "🎮 Jogos", multSeg: 1.5, multMoeda: 1.0,
+      descricao: "Atrai mais seguidores", interesse: 100
+    },
+    conversa: {
+      nome: "💬 Conversa", multSeg: 1.0, multMoeda: 1.5,
+      descricao: "Público generoso, mais doações", interesse: 100
+    },
+    culinaria: {
+      nome: "🍳 Culinária", multSeg: 1.2, multMoeda: 1.2,
+      descricao: "Equilibrado, agrada a todo mundo", interesse: 100
+    },
+    musica: {
+      nome: "🎵 Música", multSeg: 1.3, multMoeda: 1.0,
+      descricao: "Público fiel, mas poucas doações", interesse: 100
+    }
+  };
+
+  // ===== Níveis do canal (com base nos seguidores) =====
+  const niveis = [
+    { nivel: 1, seg: 0,    titulo: "Iniciante",  desbloqueio: "" },
+    { nivel: 2, seg: 50,   titulo: "Em alta",    desbloqueio: "Liberado: cenário 💜 Neon e patrocínio 🥤 Fizz." },
+    { nivel: 3, seg: 150,  titulo: "Verificado", desbloqueio: "Você ganhou o selo ✅, além do cenário 🏖️ Praia e do patrocínio 👟 Zoom." },
+    { nivel: 4, seg: 400,  titulo: "Estrela",    desbloqueio: "Liberado: cenário 🚀 Espacial e patrocínio 🎧 Pulse." },
+    { nivel: 5, seg: 1000, titulo: "Lenda",      desbloqueio: "Você chegou ao topo! 👑" }
+  ];
+
+  // ===== Patrocínios =====
+  const patrocinios = {
+    fizz: {
+      nome: "🥤 Refri Fizz", nivelMin: 2, pagamento: 60, duracao: 5,
+      multMoeda: 1.5,
+      descricao: "+50% de moedas por 5 ciclos (15 s)."
+    },
+    zoom: {
+      nome: "👟 Tênis Zoom", nivelMin: 3, pagamento: 90, duracao: 6,
+      bonusSeg: 1, cansaco: 2,
+      descricao: "+1 seguidor por ciclo por 6 ciclos. Mas o público se cansa 2x mais rápido."
+    },
+    pulse: {
+      nome: "🎧 Fone Pulse", nivelMin: 4, pagamento: 120, duracao: 5,
+      bonusSeg: 2, bonusMoeda: 3,
+      descricao: "+2 seguidores e +3 moedas por ciclo por 5 ciclos."
+    }
+  };
+
+  // ===== Cenários da casa =====
+  const cenarios = {
+    padrao: { nome: "🏠 Padrão", preco: 0, nivelMin: 1, parede: 0xf6efe0, piso: 0xd9a66b, neon: null, luz: 0xfff4d6, intensidade: 0.5 },
+    neon: { nome: "💜 Neon", preco: 120, nivelMin: 2, parede: 0x2d1b4e, piso: 0x1a1a2e, neon: 0xff3cf0, luz: 0xff3cf0, intensidade: 0.9 },
+    praia: { nome: "🏖️ Praia", preco: 200, nivelMin: 3, parede: 0x9fe3f5, piso: 0xf4d59b, neon: 0xffb347, luz: 0xffe0a3, intensidade: 0.7 },
+    espacial: { nome: "🚀 Espacial", preco: 300, nivelMin: 4, parede: 0x0b0c2a, piso: 0x23264d, neon: 0x7af0ff, luz: 0x7af0ff, intensidade: 0.8 }
+  };
+
+  // ===== Tutorial =====
+  const passos = [
+    { titulo: "Bem-vindo! 🎥", texto: "Este é o seu canal. Use ▲ ▼ ◀ ▶ (ou WASD no computador) para andar. Arraste o dedo na tela para girar a câmera." },
+    { titulo: "Começando", texto: "Você começa na rua, com o celular. Toque em AÇÃO longe da loja para começar uma live. Você ganha seguidores e moedas!" },
+    { titulo: "A loja 🛒", texto: "A loja amarela fica na calçada. Chegue perto dela e toque em AÇÃO para comprar coisas." },
+    { titulo: "Sua casa 🏠", texto: "Quando tiver 180 moedas, compre a casa na loja. Entre pela porta e monte seu estúdio. Os equipamentos só funcionam dentro de casa." },
+    { titulo: "Níveis e patrocínios ⭐", texto: "Ganhe seguidores para subir de nível. Com o nível, você libera cenários novos e patrocínios que dão ganhos extras." },
+    { titulo: "Chat e minigames 🎮", texto: "Responda o chat, receba doações e jogue minigames para ganhar mais. Divirta-se!" }
+  ];
+
+  // ===== Lugares do mapa =====
+  const HX = -30, HZ = -22;               // terreno e casa do jogador (norte da rua)
+  const MESA_X = HX, MESA_Z = HZ - 1.5;   // mesa dentro da casa
+  const LOJA_X = 14, LOJA_Z = 0;          // loja na calçada
+  const SPAWN_X = 0, SPAWN_Z = 8;         // onde o boneco começa
+
+  // ===== Chat (espectadores simulados) =====
+  const nomes = ["Lucas", "Ana", "Bia", "Pedro", "Juju", "Gabi", "Tiago", "Mari", "Zé", "Nina", "Davi", "Letícia"];
+  const falasRua = ["Tá na rua?! 😱", "Mostra a rua aí!", "Cuidado com o carro kkkk", "Que vento é esse 🌬️", "Mostra sua casa depois!"];
+  const falasCasa = ["Que casa linda!", "Mostra o setup!", "kkkkk boa demais", "Bora jogar?", "Qual teclado é esse?"];
+  const falasGerais = ["Oi, tudo bem?", "Primeira vez aqui!", "Que live boa!", "Manda um oi pro chat!", "Alguém mais tá vendo?"];
+
+  // ===== Salvamento =====
+  const CHAVE_SAVE = "simuladorLive.v5";
+
+  // ===== Estado =====
+  let seguidores = 0;
+  let moedas = 0;
+  let temCasa = false;
+  let cenarioAtual = "padrao";
+  let cenariosComprados = { padrao: true };
+  let patrocinioAtivo = null;          // { chave, ciclos }
+  let nivelRegistrado = 1;
+  let tutorialVisto = false;
+  let somLigado = true;
+  let passoTutorial = 0;
+  let confirmarApagar = false;
+  let aoVivo = false;
+  let intervalo = null;
+  let tipoAtual = null;
+  let modalAtual = null;
+  let zonaAtual = null;
+  let yaw = 0;
+  let arrastando = false;
+  let ultimoX = 0;
+
+  let minigameAtivo = null;
+  let mgTimer = null;
+  let mgSpawn = null;
+  let mgMove = null;
+  let mgPontos = 0;
+  let mgTempo = 0;
+  let mgGanhos = 0;
+
+  const VELOCIDADE = 7;
+  const GIRO = 2.2;
+  const DISTANCIA = 13;
+  const RAIO = 0.5;
+
+  const teclas = {};
+  const controle = { cima: false, baixo: false, esquerda: false, direita: false };
+  const obstaculos = [];
+  const cartoesLoja = {};
+  const cartoesCat = {};
+
+  // ===== Referências da tela =====
+  const elSeguidores = document.getElementById("seguidores");
+  const elMoedas = document.getElementById("moedas");
+  const elNivelNum = document.getElementById("nivelNum");
+  const elNivelFaltam = document.getElementById("nivelFaltam");
+  const elGanho = document.getElementById("ganho");
+  const aviso = document.getElementById("aviso");
+  const dica = document.getElementById("dica");
+  const flutuantesEl = document.getElementById("flutuantes");
+  const chatTopo = document.getElementById("chatTopo");
+  const chatLinhas = document.getElementById("chatLinhas");
+  const cartoesLojaEl = document.getElementById("cartoes");
+  const cartoesCatEl = document.getElementById("cartoesCategoria");
+  const textoCategoria = document.getElementById("textoCategoria");
+  const btnAcao = document.getElementById("btnAcao");
+  const btnMini = document.getElementById("btnMini");
+  const btnConfig = document.getElementById("btnConfig");
+  const btnEncerrar = document.getElementById("btnEncerrar");
+  const btnSom = document.getElementById("btnSom");
+  const btnVerTutorial = document.getElementById("btnVerTutorial");
+  const btnApagar = document.getElementById("btnApagar");
+  const tutTitulo = document.getElementById("tutTitulo");
+  const tutTexto = document.getElementById("tutTexto");
+  const tutProgresso = document.getElementById("tutProgresso");
+  const tutProximo = document.getElementById("tutProximo");
+  const tutPular = document.getElementById("tutPular");
+  const mgArea = document.getElementById("mgArea");
+  const mgInfo = document.getElementById("mgInfo");
+  const mgMoedasBtn = document.getElementById("mgMoedas");
+  const mgAlvoBtn = document.getElementById("mgAlvo");
+
+  // ===== Sons (gerados no próprio navegador, sem arquivos) =====
+  let audioCtx = null;
+
+  function garantirAudio() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        audioCtx = null;
+      }
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  window.addEventListener("pointerdown", garantirAudio);
+  window.addEventListener("keydown", garantirAudio);
+
+  function tom(freq, duracao, tipo, volume, atraso) {
+    if (!audioCtx) return;
+    const t0 = audioCtx.currentTime + (atraso || 0);
+    const osc = audioCtx.createOscillator();
+    const ganho = audioCtx.createGain();
+    osc.type = tipo;
+    osc.frequency.setValueAtTime(freq, t0);
+    ganho.gain.setValueAtTime(volume, t0);
+    ganho.gain.exponentialRampToValueAtTime(0.0001, t0 + duracao);
+    osc.connect(ganho);
+    ganho.connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + duracao + 0.02);
+  }
+
+  const SONS = {
+    clique: () => tom(600, 0.06, "square", 0.04),
+    moeda: () => { tom(880, 0.08, "triangle", 0.12); tom(1320, 0.12, "triangle", 0.12, 0.07); },
+    compra: () => { tom(523, 0.1, "square", 0.07); tom(659, 0.1, "square", 0.07, 0.1); tom(784, 0.18, "square", 0.07, 0.2); },
+    doacao: () => { tom(1046, 0.15, "sine", 0.15); tom(1568, 0.25, "sine", 0.12, 0.12); },
+    nivel: () => { [523, 659, 784, 1046].forEach((f, i) => tom(f, 0.2, "triangle", 0.12, i * 0.12)); },
+    live: () => { tom(440, 0.1, "sawtooth", 0.05); tom(660, 0.15, "sawtooth", 0.05, 0.1); },
+    seguidor: () => tom(700, 0.05, "sine", 0.06)
+  };
+
+  function tocar(nome) {
+    if (!somLigado || !audioCtx || !SONS[nome]) return;
+    SONS[nome]();
+  }
+
+  // ===== Salvar e carregar =====
+  function salvarJogo() {
+    try {
+      const dados = {
+        seguidores: seguidores,
+        moedas: moedas,
+        temCasa: temCasa,
+        cenarioAtual: cenarioAtual,
+        cenariosComprados: cenariosComprados,
+        equip: {
+          camera: equipamentos.camera.nivel,
+          microfone: equipamentos.microfone.nivel,
+          luz: equipamentos.luz.nivel,
+          teclado: equipamentos.teclado.nivel,
+          computador: equipamentos.computador.nivel
+        },
+        nivelRegistrado: nivelRegistrado,
+        tutorialVisto: tutorialVisto,
+        somLigado: somLigado,
+        posX: posJog.x,
+        posZ: posJog.z,
+        yaw: yaw
+      };
+      localStorage.setItem(CHAVE_SAVE, JSON.stringify(dados));
+    } catch (e) {
+      // Sem armazenamento disponível: o jogo continua, só não salva
+    }
+  }
+
+  function carregarJogo() {
+    let dados = null;
+    try {
+      dados = JSON.parse(localStorage.getItem(CHAVE_SAVE));
+    } catch (e) {
+      dados = null;
+    }
+    if (!dados) return false;
+
+    seguidores = Number(dados.seguidores) || 0;
+    moedas = Number(dados.moedas) || 0;
+    nivelRegistrado = Number(dados.nivelRegistrado) || 1;
+    tutorialVisto = !!dados.tutorialVisto;
+    somLigado = dados.somLigado !== false;
+    yaw = Number(dados.yaw) || 0;
+
+    if (dados.equip) {
+      for (const k in equipamentos) {
+        equipamentos[k].nivel = Math.min(equipamentos[k].nivelMax, Number(dados.equip[k]) || 0);
+      }
+    }
+    if (dados.cenariosComprados) cenariosComprados = dados.cenariosComprados;
+
+    if (dados.temCasa) {
+      temCasa = true;
+      casaJogador.visible = true;
+      mesa.visible = true;
+      loteGroup.visible = false;
+      adicionarObstaculosCasa();
+    }
+
+    if (typeof dados.posX === "number" && typeof dados.posZ === "number") {
+      posJog.x = Math.max(-72, Math.min(72, dados.posX));
+      posJog.z = Math.max(-58, Math.min(58, dados.posZ));
+    }
+
+    cenarioAtual = dados.cenarioAtual && cenarios[dados.cenarioAtual] ? dados.cenarioAtual : "padrao";
+    desenharEquipamentos();
+    return true;
+  }
+
+  function apagarJogo() {
+    try {
+      localStorage.removeItem(CHAVE_SAVE);
+    } catch (e) {
+      // ignora
+    }
+    location.reload();
+  }
+
+  // ===== Efeitos visuais =====
+  function flutuar(texto, cor) {
+    const el = document.createElement("div");
+    el.className = "flutuante";
+    el.textContent = texto;
+    el.style.color = cor || "#fff";
+    el.style.left = (50 + (Math.random() * 30 - 15)) + "%";
+    flutuantesEl.appendChild(el);
+    setTimeout(() => el.remove(), 1400);
+  }
+
+  // ===== Níveis e patrocínios =====
+  function nivelAtual() {
+    let atual = niveis[0];
+    for (const n of niveis) {
+      if (seguidores >= n.seg) atual = n;
+    }
+    return atual;
+  }
+
+  function estaVerificado() {
+    return nivelAtual().nivel >= 3;
+  }
+
+  function verificarNivel() {
+    const n = nivelAtual();
+    if (n.nivel > nivelRegistrado) {
+      nivelRegistrado = n.nivel;
+      mostrarAviso(`⭐ Nível ${n.nivel}: ${n.titulo}! ${n.desbloqueio}`);
+      adicionarChat(`⭐ Você subiu para o nível ${n.nivel} (${n.titulo})`, "sistema");
+      flutuar(`⭐ NÍVEL ${n.nivel}`, "#ffd54a");
+      tocar("nivel");
+      if (n.nivel === 3) adicionarChat("✅ Você ganhou o selo de verificado!", "sistema");
+    }
+  }
+
+  function efeitoPatrocinio() {
+    if (!patrocinioAtivo) return { multMoeda: 1, bonusSeg: 0, bonusMoeda: 0 };
+    const p = patrocinios[patrocinioAtivo.chave];
+    return {
+      multMoeda: p.multMoeda || 1,
+      bonusSeg: p.bonusSeg || 0,
+      bonusMoeda: p.bonusMoeda || 0
+    };
+  }
+
+  // ===== Cálculos =====
+  function custoDo(item) {
+    return item.precoBase * (item.nivel + 1);
+  }
+
+  function fatorPublico(chave) {
+    return 0.4 + 0.6 * (categorias[chave].interesse / 100);
+  }
+
+  function sorteio(lista) {
+    return lista[Math.floor(Math.random() * lista.length)];
+  }
+
+  function dentroDaCasa() {
+    return temCasa && Math.abs(posJog.x - HX) < 4.8 && Math.abs(posJog.z - HZ) < 3.8;
+  }
+
+  function localAtual() {
+    return dentroDaCasa() ? "casa" : "rua";
+  }
+
+  function calcularGanho() {
+    let seguidoresBase;
+    let moedasBase;
+
+    if (localAtual() === "casa") {
+      seguidoresBase = 1 + equipamentos.camera.nivel + equipamentos.luz.nivel + equipamentos.computador.nivel * 2;
+      moedasBase = 2 + equipamentos.microfone.nivel * 2 + equipamentos.luz.nivel + equipamentos.teclado.nivel;
+    } else {
+      seguidoresBase = 1;
+      moedasBase = 2;
+    }
+
+    const bonusNivel = 1 + 0.05 * (nivelAtual().nivel - 1);
+    const e = efeitoPatrocinio();
+
+    if (!tipoAtual) {
+      return {
+        seguidores: Math.round(seguidoresBase * bonusNivel) + e.bonusSeg,
+        moedas: Math.round(moedasBase * bonusNivel * e.multMoeda) + e.bonusMoeda
+      };
+    }
+
+    const c = categorias[tipoAtual];
+    const f = fatorPublico(tipoAtual);
+    const segBase = Math.max(1, Math.round(seguidoresBase * c.multSeg * f * bonusNivel));
+    const moedaBase = Math.max(1, Math.round(moedasBase * c.multMoeda * f * bonusNivel));
+    return {
+      seguidores: segBase + e.bonusSeg,
+      moedas: Math.round(moedaBase * e.multMoeda) + e.bonusMoeda
+    };
+  }
+
+  // ===== Cena 3D =====
+  const cena = new THREE.Scene();
+  cena.background = new THREE.Color(0x9fd8ff);
+  cena.fog = new THREE.Fog(0x9fd8ff, 70, 170);
+
+  const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 400);
+  camera.position.set(SPAWN_X, 7, SPAWN_Z + DISTANCIA);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.domElement.style.position = "fixed";
+  renderer.domElement.style.top = "0";
+  renderer.domElement.style.left = "0";
+  renderer.domElement.style.zIndex = "0";
+  renderer.domElement.style.touchAction = "none";
+  document.body.appendChild(renderer.domElement);
+
+  // Luz do céu + sol com sombras
+  cena.add(new THREE.HemisphereLight(0xdff3ff, 0x557a3a, 0.9));
+  const sol = new THREE.DirectionalLight(0xfff1d6, 0.9);
+  sol.position.set(30, 50, 20);
+  sol.castShadow = true;
+  sol.shadow.mapSize.set(2048, 2048);
+  sol.shadow.camera.left = -80;
+  sol.shadow.camera.right = 80;
+  sol.shadow.camera.top = 80;
+  sol.shadow.camera.bottom = -80;
+  sol.shadow.camera.near = 1;
+  sol.shadow.camera.far = 160;
+  sol.shadow.camera.updateProjectionMatrix();
+  sol.shadow.bias = -0.0008;
+  cena.add(sol);
+
+  // Material compartilhado (um por cor)
+  const cacheMateriais = {};
+  function material(cor) {
+    if (!cacheMateriais[cor]) {
+      cacheMateriais[cor] = new THREE.MeshStandardMaterial({
+        color: cor, roughness: 0.85, metalness: 0.05
+      });
+    }
+    return cacheMateriais[cor];
+  }
+
+  function caixaMat(w, h, d, mat, x, y, z) {
+    const malha = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    malha.position.set(x, y, z);
+    malha.castShadow = true;
+    malha.receiveShadow = true;
+    return malha;
+  }
+
+  function caixa(w, h, d, cor, x, y, z) {
+    return caixaMat(w, h, d, material(cor), x, y, z);
+  }
+
+  function plano(largura, profundidade, cor, x, y, z) {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(largura, profundidade), material(cor));
+    p.rotation.x = -Math.PI / 2;
+    p.position.set(x, y, z);
+    p.receiveShadow = true;
+    cena.add(p);
+    return p;
+  }
+
+  function pivo(x, y, z) {
+    const grupo = new THREE.Group();
+    grupo.position.set(x, y, z);
+    return grupo;
+  }
+
+  function criarBoneco(corCamisa, corCalca) {
+    const grupo = new THREE.Group();
+    const pele = 0xf2c94c;
+
+    grupo.add(caixa(1.0, 1.2, 0.6, corCamisa, 0, 1.6, 0));
+    grupo.add(caixa(1.0, 1.0, 1.0, pele, 0, 2.7, 0));
+    grupo.add(caixa(1.05, 0.3, 1.05, 0x5d4037, 0, 3.35, 0));
+    grupo.add(caixa(0.15, 0.15, 0.05, 0x111111, -0.22, 2.8, 0.51));
+    grupo.add(caixa(0.15, 0.15, 0.05, 0x111111, 0.22, 2.8, 0.51));
+
+    const bracoE = pivo(-0.7, 2.1, 0);
+    bracoE.add(caixa(0.4, 1.0, 0.4, pele, 0, -0.5, 0));
+    grupo.add(bracoE);
+
+    const bracoD = pivo(0.7, 2.1, 0);
+    bracoD.add(caixa(0.4, 1.0, 0.4, pele, 0, -0.5, 0));
+    grupo.add(bracoD);
+
+    const pernaE = pivo(-0.25, 1.0, 0);
+    pernaE.add(caixa(0.45, 1.0, 0.5, corCalca, 0, -0.5, 0));
+    grupo.add(pernaE);
+
+    const pernaD = pivo(0.25, 1.0, 0);
+    pernaD.add(caixa(0.45, 1.0, 0.5, corCalca, 0, -0.5, 0));
+    grupo.add(pernaD);
+
+    return { grupo, bracoE, bracoD, pernaE, pernaD };
+  }
+
+  function criarPlaca(texto, corFundo) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = corFundo;
+    ctx.fillRect(0, 0, 512, 128);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 56px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(texto, 256, 66);
+    const textura = new THREE.CanvasTexture(canvas);
+    return new THREE.Mesh(
+      new THREE.PlaneGeometry(3, 0.75),
+      new THREE.MeshBasicMaterial({ map: textura })
+    );
+  }
+
+  function adicionarObstaculo(cx, cz, meiaLargura, meiaProfundidade) {
+    obstaculos.push({
+      minX: cx - meiaLargura, maxX: cx + meiaLargura,
+      minZ: cz - meiaProfundidade, maxZ: cz + meiaProfundidade
+    });
+  }
+
+  // Ruas, calçada e faixas
+  plano(170, 140, 0x6cbf4a, 0, 0, 0);
+  plano(150, 8, 0xd9dde0, 0, 0.01, 0);    // calçada
+  plano(150, 8, 0x4a4f57, 0, 0.01, -10);  // rua
+  for (let x = -70; x <= 70; x += 5) {
+    cena.add(caixa(2.2, 0.03, 0.25, 0xffffff, x, 0.03, -10));
+  }
+
+  // Postes com luz
+  function poste(x, z) {
+    const g = new THREE.Group();
+    g.add(caixa(0.15, 3.2, 0.15, 0x3d3d3d, 0, 1.6, 0));
+    const globo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 12, 10),
+      new THREE.MeshStandardMaterial({ color: 0xfff3b0, emissive: 0xffe27a, emissiveIntensity: 0.9 })
+    );
+    globo.position.set(0, 3.3, 0);
+    g.add(globo);
+    g.position.set(x, 0, z);
+    cena.add(g);
+    adicionarObstaculo(x, z, 0.25, 0.25);
+  }
+  for (let x = -60; x <= 60; x += 15) poste(x, -2.8);
+
+  // Árvores
+  function arvore(x, z, escala) {
+    const g = new THREE.Group();
+    g.add(caixa(0.5, 1.6, 0.5, 0x7b4a24, 0, 0.8, 0));
+    const copa = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 10), material(0x2f9e4f));
+    copa.position.set(0, 2.6, 0);
+    copa.castShadow = true;
+    copa.receiveShadow = true;
+    g.add(copa);
+    g.scale.setScalar(escala);
+    g.position.set(x, 0, z);
+    cena.add(g);
+    adicionarObstaculo(x, z, 0.5 * escala, 0.5 * escala);
+  }
+
+  // Casas de vizinhos (decoração, com telhado)
+  function casaDecor(x, z, cor) {
+    const g = new THREE.Group();
+    g.add(caixa(6, 3.4, 6, cor, 0, 1.7, 0));
+    const telhado = new THREE.Mesh(new THREE.ConeGeometry(5.1, 2.2, 4), material(0xb03a2e));
+    telhado.rotation.y = Math.PI / 4;
+    telhado.position.set(0, 4.5, 0);
+    telhado.castShadow = true;
+    g.add(telhado);
+    g.add(caixa(1.2, 2, 0.1, 0x6d4c41, 0, 1, 3.02));
+    g.position.set(x, 0, z);
+    cena.add(g);
+    adicionarObstaculo(x, z, 3.2, 3.2);
+  }
+
+  const casasDecor = [
+    [30, -24, 0xf5cba7],
+    [-54, -26, 0xaed6f1],
+    [50, 22, 0xa9dfbf],
+    [-46, 22, 0xf9e79f],
+    [6, -30, 0xf5b7b1]
+  ];
+  casasDecor.forEach(([x, z, cor]) => casaDecor(x, z, cor));
+
+  // Materiais próprios da casa (para o cenário poder trocar as cores)
+  const matParede = new THREE.MeshStandardMaterial({ color: 0xf6efe0, roughness: 0.9 });
+  const matPiso = new THREE.MeshStandardMaterial({ color: 0xd9a66b, roughness: 0.8 });
+
+  // Casa do jogador (sem telhado, para dar para ver lá dentro)
+  const casaJogador = new THREE.Group();
+  casaJogador.position.set(HX, 0, HZ);
+  casaJogador.visible = false;
+  cena.add(casaJogador);
+
+  const pisoCasa = new THREE.Mesh(new THREE.PlaneGeometry(10, 8), matPiso);
+  pisoCasa.rotation.x = -Math.PI / 2;
+  pisoCasa.position.y = 0.02;
+  pisoCasa.receiveShadow = true;
+  casaJogador.add(pisoCasa);
+
+  const alturaParede = 2.6;
+  casaJogador.add(caixaMat(10, alturaParede, 0.4, matParede, 0, alturaParede / 2, -4));      // fundo
+  casaJogador.add(caixaMat(0.4, alturaParede, 8, matParede, -5, alturaParede / 2, 0));       // esquerda
+  casaJogador.add(caixaMat(0.4, alturaParede, 8, matParede, 5, alturaParede / 2, 0));        // direita
+  casaJogador.add(caixaMat(3.8, alturaParede, 0.4, matParede, -3.1, alturaParede / 2, 4));   // frente (esquerda da porta)
+  casaJogador.add(caixaMat(3.8, alturaParede, 0.4, matParede, 3.1, alturaParede / 2, 4));    // frente (direita da porta)
+  casaJogador.add(caixa(1.1, 0.7, 2.4, 0x8e5b9e, 3.8, 0.35, 0.8));                            // sofá
+
+  // Faixa de neon (aparece nos cenários com neon)
+  const faixaNeon = new THREE.Mesh(
+    new THREE.BoxGeometry(6, 0.12, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x000000, emissiveIntensity: 1.5 })
+  );
+  faixaNeon.position.set(0, 2.3, -3.78);
+  faixaNeon.visible = false;
+  casaJogador.add(faixaNeon);
+
+  // Luz interna que muda com o cenário
+  const luzCasa = new THREE.PointLight(0xfff4d6, 0.5, 9);
+  luzCasa.position.set(0, 2.2, 0);
+  casaJogador.add(luzCasa);
+
+  // Placa do terreno à venda (some depois da compra)
+  const loteGroup = new THREE.Group();
+  loteGroup.position.set(HX, 0, HZ + 6.5);
+  loteGroup.add(caixa(0.12, 1.4, 0.12, 0x5d4037, 0, 0.7, 0));
+  const placaLote = criarPlaca("À VENDA", "#16a085");
+  placaLote.position.set(0, 1.9, 0);
+  loteGroup.add(placaLote);
+  cena.add(loteGroup);
+
+  // Mesa de live (fica dentro da casa)
+  const mesa = new THREE.Group();
+  mesa.position.set(MESA_X, 0, MESA_Z);
+  mesa.visible = false;
+  cena.add(mesa);
+
+  mesa.add(caixa(4.5, 1.1, 2.5, 0x8d6e63, 0, 0.55, 0));
+  mesa.add(caixa(1.8, 1.1, 0.1, 0x222222, 0, 1.85, -0.8));
+  const telaMonitor = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.9, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0x3498db })
+  );
+  telaMonitor.position.set(0, 1.85, -0.74);
+  telaMonitor.castShadow = true;
+  mesa.add(telaMonitor);
+  mesa.add(caixa(0.25, 0.25, 0.25, 0x222222, 0, 1.225, -0.8));
+
+  // Equipamentos que aparecem na mesa
+  const equipCamera = caixa(0.7, 0.45, 0.45, 0x2c3e50, -1.6, 1.325, -0.2);
+  const equipMicrofone = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.18, 0.5, 12),
+    material(0x95a5a6)
+  );
+  equipMicrofone.position.set(1.5, 1.35, -0.2);
+  const equipLed = caixa(0.2, 1.4, 0.2, 0xff66cc, 2.0, 1.8, -0.9);
+  const equipTeclado = caixa(1.3, 0.06, 0.45, 0x2d3436, 0, 1.13, 0.5);
+  const equipComputador = caixa(0.6, 1.2, 0.9, 0x2d3436, -2.6, 1.7, -0.3);
+  mesa.add(equipCamera);
+  mesa.add(equipMicrofone);
+  mesa.add(equipLed);
+  mesa.add(equipTeclado);
+  mesa.add(equipComputador);
+
+  // Loja na calçada
+  const loja = new THREE.Group();
+  loja.position.set(LOJA_X, 0, LOJA_Z);
+  cena.add(loja);
+  loja.add(caixa(4, 1.1, 2, 0x6d4c41, 0, 0.55, 0));
+  loja.add(caixa(4.2, 0.1, 2.2, 0xf1c40f, 0, 1.15, 0));
+  loja.add(caixa(0.2, 3, 0.2, 0x333333, -2, 1.5, 1));
+  loja.add(caixa(0.2, 3, 0.2, 0x333333, 2, 1.5, 1));
+  loja.add(caixa(5, 0.3, 3.2, 0xe74c3c, 0, 3.0, 0.5));
+  const placaLoja = criarPlaca("LOJA", "#f39c12");
+  placaLoja.position.set(LOJA_X, 2.3, 2.1);
+  cena.add(placaLoja);
+  adicionarObstaculo(LOJA_X, LOJA_Z, 2, 1);
+
+  const vendedor = criarBoneco(0xe74c3c, 0x2c3e50);
+  vendedor.grupo.position.set(LOJA_X, 0, -2.2);
+  cena.add(vendedor.grupo);
+
+  // Árvores espalhadas (com gerador fixo, sempre no mesmo lugar)
+  const zonasProibidas = [
+    { x: HX, z: HZ, r: 9 },
+    { x: LOJA_X, z: LOJA_Z, r: 5 },
+    { x: SPAWN_X, z: SPAWN_Z, r: 4 }
+  ];
+  casasDecor.forEach(([x, z]) => zonasProibidas.push({ x, z, r: 7 }));
+
+  let semente = 42;
+  function aleatorio() {
+    semente = (semente * 16807) % 2147483647;
+    return semente / 2147483647;
+  }
+
+  for (let i = 0; i < 110; i++) {
+    const x = (aleatorio() * 2 - 1) * 72;
+    const z = (aleatorio() * 2 - 1) * 58;
+    if (Math.abs(z) < 16) continue;
+    if (zonasProibidas.some((zn) => Math.hypot(x - zn.x, z - zn.z) < zn.r)) continue;
+    arvore(x, z, 0.8 + aleatorio() * 0.5);
+  }
+
+  // Jogador
+  const jogador = criarBoneco(0x3498db, 0x34495e);
+  jogador.grupo.position.set(SPAWN_X, 0, SPAWN_Z);
+  cena.add(jogador.grupo);
+  const posJog = jogador.grupo.position;
+
+  // Obstáculos da casa (só entram depois da compra)
+  function adicionarObstaculosCasa() {
+    adicionarObstaculo(HX, HZ - 4, 5, 0.2);            // fundo
+    adicionarObstaculo(HX - 5, HZ, 0.2, 4);            // esquerda
+    adicionarObstaculo(HX + 5, HZ, 0.2, 4);            // direita
+    adicionarObstaculo(HX - 3.1, HZ + 4, 1.9, 0.2);    // frente, lado da porta
+    adicionarObstaculo(HX + 3.1, HZ + 4, 1.9, 0.2);    // frente, outro lado da porta
+    adicionarObstaculo(MESA_X, MESA_Z, 2.25, 1.25);    // mesa
+    adicionarObstaculo(HX + 3.8, HZ + 0.8, 0.55, 1.2); // sofá
+  }
+
+  function aplicarCenario(chave) {
+    const c = cenarios[chave];
+    cenarioAtual = chave;
+    matParede.color.set(c.parede);
+    matPiso.color.set(c.piso);
+    luzCasa.color.set(c.luz);
+    luzCasa.intensity = c.intensidade;
+    faixaNeon.visible = !!c.neon;
+    if (c.neon) {
+      faixaNeon.material.color.set(c.neon);
+      faixaNeon.material.emissive.set(c.neon);
+    }
+  }
+
+  // ===== Movimento =====
+  function bloqueado(x, z) {
+    for (const o of obstaculos) {
+      if (x > o.minX - RAIO && x < o.maxX + RAIO && z > o.minZ - RAIO && z < o.maxZ + RAIO) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function direcaoEntrada() {
+    // ix: direita (+) / esquerda (-)   iy: frente (+) / trás (-)
+    let ix = 0;
+    let iy = 0;
+    if (teclas["w"] || teclas["arrowup"] || controle.cima) iy += 1;
+    if (teclas["s"] || teclas["arrowdown"] || controle.baixo) iy -= 1;
+    if (teclas["a"] || controle.esquerda) ix -= 1;
+    if (teclas["d"] || controle.direita) ix += 1;
+    return [ix, iy];
+  }
+
+  function moverJogador(dt) {
+    // Setas ← → do teclado também giram a câmera
+    if (teclas["arrowleft"]) yaw += GIRO * dt;
+    if (teclas["arrowright"]) yaw -= GIRO * dt;
+
+    const [ix, iy] = direcaoEntrada();
+    if (ix === 0 && iy === 0) return false;
+
+    // Movimento relativo à câmera: "frente" é para onde a câmera olha
+    const tamanho = Math.hypot(ix, iy);
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    const rx = Math.cos(yaw);
+    const rz = -Math.sin(yaw);
+    const mx = (fx * iy + rx * ix) / tamanho;
+    const mz = (fz * iy + rz * ix) / tamanho;
+
+    const passo = VELOCIDADE * dt;
+    const novoX = posJog.x + mx * passo;
+    if (!bloqueado(novoX, posJog.z)) posJog.x = novoX;
+    const novoZ = posJog.z + mz * passo;
+    if (!bloqueado(posJog.x, novoZ)) posJog.z = novoZ;
+
+    jogador.grupo.rotation.y = Math.atan2(mx, mz);
+
+    posJog.x = Math.max(-72, Math.min(72, posJog.x));
+    posJog.z = Math.max(-58, Math.min(58, posJog.z));
+    return true;
+  }
+
+  function animarBoneco(b, andando, t) {
+    const balanco = andando ? Math.sin(t * 10) * 0.7 : 0;
+    b.pernaE.rotation.x = balanco;
+    b.pernaD.rotation.x = -balanco;
+    b.bracoE.rotation.x = -balanco;
+    b.bracoD.rotation.x = balanco;
+  }
+
+  function atualizarCamera(dt) {
+    const k = Math.min(1, dt * 10);
+    const alvoX = posJog.x + Math.sin(yaw) * DISTANCIA;
+    const alvoZ = posJog.z + Math.cos(yaw) * DISTANCIA;
+    camera.position.x += (alvoX - camera.position.x) * k;
+    camera.position.y += (7 - camera.position.y) * k;
+    camera.position.z += (alvoZ - camera.position.z) * k;
+    camera.lookAt(posJog.x, 1.5, posJog.z);
+  }
+
+  // ===== Zonas de interação =====
+  function atualizarZona() {
+    if (modalAtual) {
+      dica.style.display = "none";
+      return;
+    }
+
+    const dLoja = Math.hypot(posJog.x - LOJA_X, posJog.z - LOJA_Z);
+    zonaAtual = dLoja < 3.5 ? "loja" : "outro";
+
+    let texto;
+    if (zonaAtual === "loja") {
+      texto = "Toque em AÇÃO para abrir a loja";
+    } else if (aoVivo) {
+      texto = "Toque em AÇÃO para mudar o tipo ou encerrar a live";
+    } else if (dentroDaCasa()) {
+      texto = "Você está em casa! Toque em AÇÃO para começar a live";
+    } else {
+      texto = "Você está na rua. Toque em AÇÃO para uma live com o celular";
+    }
+
+    dica.textContent = texto;
+    dica.style.display = "block";
+  }
+
+  function acao() {
+    if (modalAtual) {
+      fecharModal();
+      return;
+    }
+    if (zonaAtual === "loja") abrirModal("lojaPainel");
+    else abrirModal("categoriaPainel");
+  }
+
+  // ===== Modais =====
+  function abrirModal(id) {
+    modalAtual = id;
+    document.getElementById(id).style.display = "flex";
+    zerarControles();
+    atualizarHUD();
+  }
+
+  function fecharModal() {
+    const anterior = modalAtual;
+    if (anterior === "minigamePainel") pararMinigame();
+    if (anterior === "tutorialPainel") {
+      tutorialVisto = true;
+      salvarJogo();
+    }
+    if (anterior === "configPainel") resetarApagar();
+    if (anterior) {
+      document.getElementById(anterior).style.display = "none";
+    }
+    modalAtual = null;
+    zerarControles();
+  }
+
+  function zerarControles() {
+    for (const k in controle) controle[k] = false;
+    for (const k in teclas) teclas[k] = false;
+  }
+
+  function mostrarAviso(texto) {
+    aviso.textContent = texto;
+  }
+
+  // ===== Tutorial =====
+  function abrirTutorial() {
+    passoTutorial = 0;
+    abrirModal("tutorialPainel");
+    mostrarPasso();
+  }
+
+  function mostrarPasso() {
+    const p = passos[passoTutorial];
+    tutTitulo.textContent = p.titulo;
+    tutTexto.textContent = p.texto;
+    tutProgresso.textContent = `${passoTutorial + 1} de ${passos.length}`;
+    tutProximo.textContent = passoTutorial === passos.length - 1 ? "Começar! 🎉" : "Próximo";
+  }
+
+  tutProximo.addEventListener("click", () => {
+    tocar("clique");
+    if (passoTutorial >= passos.length - 1) {
+      fecharModal();
+      return;
+    }
+    passoTutorial += 1;
+    mostrarPasso();
+  });
+  tutPular.addEventListener("click", () => fecharModal());
+
+  // ===== Configurações =====
+  function atualizarBotaoSom() {
+    btnSom.textContent = somLigado ? "🔊 Som: ligado" : "🔇 Som: desligado";
+  }
+
+  function resetarApagar() {
+    confirmarApagar = false;
+    btnApagar.textContent = "🗑️ Apagar progresso";
+  }
+
+  btnConfig.addEventListener("click", () => {
+    if (modalAtual) return;
+    atualizarBotaoSom();
+    abrirModal("configPainel");
+  });
+
+  btnSom.addEventListener("click", () => {
+    somLigado = !somLigado;
+    atualizarBotaoSom();
+    tocar("clique");
+    salvarJogo();
+  });
+
+  btnVerTutorial.addEventListener("click", () => {
+    fecharModal();
+    abrirTutorial();
+  });
+
+  btnApagar.addEventListener("click", () => {
+    if (!confirmarApagar) {
+      confirmarApagar = true;
+      btnApagar.textContent = "Toque de novo para confirmar";
+      return;
+    }
+    apagarJogo();
+  });
+
+  // ===== Chat =====
+  function adicionarChat(html, classe = "") {
+    const linha = document.createElement("div");
+    linha.className = `linha ${classe}`;
+    linha.innerHTML = html;
+    chatLinhas.appendChild(linha);
+    while (chatLinhas.children.length > 6) {
+      chatLinhas.removeChild(chatLinhas.firstChild);
+    }
+  }
+
+  function chatMensagemAleatoria() {
+    const pool = Math.random() < 0.5
+      ? (localAtual() === "casa" ? falasCasa : falasRua)
+      : falasGerais;
+    adicionarChat(`<b>${sorteio(nomes)}:</b> ${sorteio(pool)}`);
+  }
+
+  function chatEntrada() {
+    adicionarChat(`🔔 ${sorteio(nomes)} entrou na live`, "sistema");
+  }
+
+  function doacao() {
+    const c = categorias[tipoAtual];
+    const valor = Math.round((5 + Math.random() * 15) * c.multMoeda);
+    moedas += valor;
+    adicionarChat(`💸 ${sorteio(nomes)} doou ${valor} moedas!`, "doacao");
+    flutuar(`+${valor} 💸`, "#ffd54a");
+    tocar("doacao");
+  }
+
+  document.querySelectorAll(".resposta").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      tocar("clique");
+      if (!aoVivo) {
+        adicionarChat("Você precisa estar ao vivo para responder.", "sistema");
+        return;
+      }
+      const prefixo = estaVerificado() ? "✅ " : "";
+      adicionarChat(`<b>${prefixo}Você:</b> ${botao.dataset.texto}`, "voce");
+      seguidores += 1;
+      if (tipoAtual) {
+        const c = categorias[tipoAtual];
+        c.interesse = Math.min(100, c.interesse + 4);
+      }
+      atualizarHUD();
+    });
+  });
+
+  // ===== Live =====
+  function iniciarLive() {
+    aoVivo = true;
+    intervalo = setInterval(tick, 3000);
+    telaMonitor.material.color.set(0xe74c3c);
+    mostrarAviso("Você está ao vivo! 🔴 Pode andar enquanto a live roda.");
+    adicionarChat(`🔴 Live começou: ${categorias[tipoAtual].nome}`, "sistema");
+    tocar("live");
+  }
+
+  function pararLive() {
+    aoVivo = false;
+    clearInterval(intervalo);
+    telaMonitor.material.color.set(0x3498db);
+    mostrarAviso("Live encerrada. Volte à loja para comprar equipamentos!");
+    adicionarChat("⏹ Live encerrada", "sistema");
+  }
+
+  function tick() {
+    // Cansaço do público (o Zoom deixa o público se cansar mais rápido)
+    const patr = patrocinioAtivo ? patrocinios[patrocinioAtivo.chave] : null;
+    const desgaste = 3 * (patr && patr.cansaco ? patr.cansaco : 1);
+    for (const chave in categorias) {
+      const c = categorias[chave];
+      if (chave === tipoAtual) {
+        c.interesse = Math.max(30, c.interesse - desgaste);
+      } else {
+        c.interesse = Math.min(100, c.interesse + 1);
+      }
+    }
+
+    const g = calcularGanho();
+    seguidores += g.seguidores;
+    moedas += g.moedas;
+    flutuar(`+${g.seguidores} 👥  +${g.moedas} 🪙`, "#ffffff");
+
+    // Patrocínio: conta um ciclo
+    if (patrocinioAtivo) {
+      patrocinioAtivo.ciclos -= 1;
+      if (patrocinioAtivo.ciclos <= 0) {
+        adicionarChat(`🤝 Patrocínio terminou: ${patr.nome}`, "sistema");
+        patrocinioAtivo = null;
+      }
+    }
+
+    chatMensagemAleatoria();
+    if (Math.random() < 0.25) chatEntrada();
+    if (Math.random() < 0.3 + (tipoAtual === "conversa" ? 0.15 : 0)) doacao();
+
+    atualizarHUD();
+  }
+
+  function escolherCategoria(chave) {
+    const jaAoVivo = aoVivo;
+    tipoAtual = chave;
+
+    if (!jaAoVivo) {
+      iniciarLive();
+    } else {
+      mostrarAviso(`Agora a live é de ${categorias[chave].nome}!`);
+      adicionarChat(`🔄 Mudou o tipo para ${categorias[chave].nome}`, "sistema");
+    }
+
+    fecharModal();
+    atualizarHUD();
+  }
+
+  // ===== Loja =====
+  function criarSecao(texto) {
+    const h = document.createElement("div");
+    h.className = "secao";
+    h.textContent = texto;
+    cartoesLojaEl.appendChild(h);
+  }
+
+  function criarCartao(html) {
+    const div = document.createElement("div");
+    div.className = "cartao";
+    div.innerHTML = html;
+    cartoesLojaEl.appendChild(div);
+    return div;
+  }
+
+  function criarCartoesLoja() {
+    // Casa e equipamentos
+    criarSecao("🏠 Casa e equipamentos");
+
+    const divCasa = criarCartao(`
+      <h3>🏠 Casa</h3>
+      <p>Terreno com casa. Os equipamentos só funcionam dentro dela.</p>
+      <p class="nivel"></p>
+      <button class="comprar"></button>`);
+    const botaoCasa = divCasa.querySelector(".comprar");
+    botaoCasa.addEventListener("click", comprarCasa);
+    cartoesLoja.casa = { nivel: divCasa.querySelector(".nivel"), botao: botaoCasa };
+
+    for (const chave in equipamentos) {
+      const div = criarCartao(`
+        <h3>${equipamentos[chave].nome}</h3>
+        <p>${equipamentos[chave].descricao}</p>
+        <p class="nivel"></p>
+        <button class="comprar"></button>`);
+      const botao = div.querySelector(".comprar");
+      botao.addEventListener("click", () => comprar(chave));
+      cartoesLoja[chave] = { nivel: div.querySelector(".nivel"), botao: botao };
+    }
+
+    // Cenários
+    criarSecao("🎨 Cenários da casa");
+    for (const chave in cenarios) {
+      const div = criarCartao(`
+        <h3>${cenarios[chave].nome}</h3>
+        <p class="req"></p>
+        <button class="comprar"></button>`);
+      const botao = div.querySelector(".comprar");
+      botao.addEventListener("click", () => comprarCenario(chave));
+      cartoesLoja["c_" + chave] = { req: div.querySelector(".req"), botao: botao };
+    }
+
+    // Patrocínios
+    criarSecao("🤝 Patrocínios (ganhos extras por alguns ciclos)");
+    for (const chave in patrocinios) {
+      const p = patrocinios[chave];
+      const div = criarCartao(`
+        <h3>${p.nome}</h3>
+        <p>${p.descricao}</p>
+        <p class="req"></p>
+        <button class="comprar"></button>`);
+      const botao = div.querySelector(".comprar");
+      botao.addEventListener("click", () => contratarPatrocinio(chave));
+      cartoesLoja["p_" + chave] = { req: div.querySelector(".req"), botao: botao };
+    }
+  }
+
+  function atualizarLoja() {
+    const nivelOk = (min) => nivelAtual().nivel >= min;
+
+    // Casa
+    const casaRef = cartoesLoja.casa;
+    casaRef.nivel.textContent = temCasa ? "Você já tem casa ✅" : "Terreno à venda";
+    casaRef.botao.textContent = temCasa ? "Comprada" : `Comprar por ${PRECO_CASA} moedas`;
+    casaRef.botao.disabled = temCasa || moedas < PRECO_CASA;
+
+    // Equipamentos
+    for (const chave in equipamentos) {
+      const item = equipamentos[chave];
+      const ref = cartoesLoja[chave];
+      const maximo = item.nivel >= item.nivelMax;
+      const custo = custoDo(item);
+
+      ref.nivel.textContent = `Nível: ${item.nivel} / ${item.nivelMax}`;
+      if (!temCasa) {
+        ref.botao.textContent = "Precisa de casa primeiro";
+        ref.botao.disabled = true;
+      } else {
+        ref.botao.textContent = maximo ? "Nível máximo" : `Comprar por ${custo} moedas`;
+        ref.botao.disabled = maximo || moedas < custo;
+      }
+    }
+
+    // Cenários
+    for (const chave in cenarios) {
+      const c = cenarios[chave];
+      const ref = cartoesLoja["c_" + chave];
+      ref.req.textContent = `Requer nível ${c.nivelMin} · ${c.preco ? "Preço: " + c.preco + " moedas" : "Grátis"}`;
+
+      if (cenarioAtual === chave) {
+        ref.botao.textContent = "Em uso";
+        ref.botao.disabled = true;
+      } else if (!temCasa) {
+        ref.botao.textContent = "Precisa de casa primeiro";
+        ref.botao.disabled = true;
+      } else if (!nivelOk(c.nivelMin)) {
+        ref.botao.textContent = "Bloqueado";
+        ref.botao.disabled = true;
+      } else if (cenariosComprados[chave]) {
+        ref.botao.textContent = "Usar este";
+        ref.botao.disabled = false;
+      } else {
+        ref.botao.textContent = `Comprar por ${c.preco} moedas`;
+        ref.botao.disabled = moedas < c.preco;
+      }
+    }
+
+    // Patrocínios
+    for (const chave in patrocinios) {
+      const p = patrocinios[chave];
+      const ref = cartoesLoja["p_" + chave];
+      ref.req.textContent = `Requer nível ${p.nivelMin} · Paga ${p.pagamento} moedas`;
+
+      if (patrocinioAtivo && patrocinioAtivo.chave === chave) {
+        ref.botao.textContent = `Ativo: ${patrocinioAtivo.ciclos} ciclos restantes`;
+        ref.botao.disabled = true;
+      } else if (patrocinioAtivo) {
+        ref.botao.textContent = "Já tem um patrocínio ativo";
+        ref.botao.disabled = true;
+      } else if (!nivelOk(p.nivelMin)) {
+        ref.botao.textContent = "Bloqueado";
+        ref.botao.disabled = true;
+      } else {
+        ref.botao.textContent = `Aceitar por ${p.pagamento} moedas`;
+        ref.botao.disabled = moedas < p.pagamento;
+      }
+    }
+  }
+
+  function comprarCasa() {
+    if (temCasa || moedas < PRECO_CASA) return;
+
+    moedas -= PRECO_CASA;
+    temCasa = true;
+    casaJogador.visible = true;
+    mesa.visible = true;
+    loteGroup.visible = false;
+    adicionarObstaculosCasa();
+    tocar("compra");
+    mostrarAviso("Você comprou sua casa! 🏠 Entre pela porta e monte seu estúdio.");
+    adicionarChat("🏠 Você se mudou para a casa nova!", "sistema");
+    salvarJogo();
+    atualizarHUD();
+  }
+
+  function comprar(chave) {
+    const item = equipamentos[chave];
+    const custo = custoDo(item);
+    if (!temCasa || item.nivel >= item.nivelMax || moedas < custo) return;
+
+    moedas -= custo;
+    item.nivel += 1;
+    desenharEquipamentos();
+    tocar("compra");
+    mostrarAviso(`${item.nome} melhorou para o nível ${item.nivel}!`);
+    salvarJogo();
+    atualizarHUD();
+  }
+
+  function comprarCenario(chave) {
+    const c = cenarios[chave];
+    if (!temCasa || nivelAtual().nivel < c.nivelMin) return;
+
+    if (!cenariosComprados[chave]) {
+      if (moedas < c.preco) return;
+      moedas -= c.preco;
+      cenariosComprados[chave] = true;
+      tocar("compra");
+    } else {
+      tocar("clique");
+    }
+    aplicarCenario(chave);
+    mostrarAviso(`Cenário ${c.nome} aplicado na sua casa!`);
+    salvarJogo();
+    atualizarHUD();
+  }
+
+  function contratarPatrocinio(chave) {
+    const p = patrocinios[chave];
+    if (patrocinioAtivo || nivelAtual().nivel < p.nivelMin || moedas < p.pagamento) return;
+
+    moedas -= p.pagamento;
+    patrocinioAtivo = { chave: chave, ciclos: p.duracao };
+    tocar("compra");
+    mostrarAviso(`Patrocínio ativo: ${p.nome} por ${p.duracao} ciclos!`);
+    adicionarChat(`🤝 Patrocínio fechado: ${p.nome}`, "sistema");
+    salvarJogo();
+    atualizarHUD();
+  }
+
+  function desenharEquipamentos() {
+    equipCamera.visible = equipamentos.camera.nivel > 0;
+    equipMicrofone.visible = equipamentos.microfone.nivel > 0;
+    equipLed.visible = equipamentos.luz.nivel > 0;
+    equipTeclado.visible = equipamentos.teclado.nivel > 0;
+    equipComputador.visible = equipamentos.computador.nivel > 0;
+  }
+
+  // ===== Cartões de tipo de live =====
+  function criarCartoesCategoria() {
+    for (const chave in categorias) {
+      const c = categorias[chave];
+      const div = document.createElement("div");
+      div.className = "cartao";
+      div.innerHTML = `
+        <h3>${c.nome}</h3>
+        <p>${c.descricao}</p>
+        <p class="mult"></p>
+        <p class="publico"></p>
+        <div class="barra"><div></div></div>
+        <button class="comprar"></button>`;
+
+      const botao = div.querySelector(".comprar");
+      botao.addEventListener("click", () => escolherCategoria(chave));
+
+      cartoesCat[chave] = {
+        mult: div.querySelector(".mult"),
+        publico: div.querySelector(".publico"),
+        barra: div.querySelector(".barra div"),
+        botao: botao
+      };
+      cartoesCatEl.appendChild(div);
+    }
+  }
+
+  function atualizarCategorias() {
+    const localTxt = localAtual() === "casa"
+      ? "🏠 Você está em casa (equipamentos ativos)"
+      : "📱 Você está na rua (live com o celular)";
+    const aviso2 = temCasa ? "" : " Compre uma casa na loja para ganhar mais!";
+    const inicio = aoVivo ? `Ao vivo em ${categorias[tipoAtual].nome}. ` : "Escolha o tipo de live. ";
+    textoCategoria.textContent = inicio + localTxt + "." + aviso2 +
+      " Se ficar muito tempo no mesmo tipo, o público se cansa!";
+
+    for (const chave in categorias) {
+      const c = categorias[chave];
+      const ref = cartoesCat[chave];
+      const pct = Math.round(c.interesse);
+      const atual = aoVivo && tipoAtual === chave;
+
+      ref.mult.textContent = `Seguidores ×${c.multSeg} · Moedas ×${c.multMoeda}`;
+      ref.publico.textContent = `Público: ${pct}%`;
+      ref.barra.style.width = pct + "%";
+      ref.botao.disabled = atual;
+      ref.botao.textContent = atual
+        ? "Ao vivo agora"
+        : aoVivo ? "Trocar para este" : "Começar com este";
+    }
+
+    btnEncerrar.style.display = aoVivo ? "inline-block" : "none";
+  }
+
+  btnEncerrar.addEventListener("click", () => {
+    tocar("clique");
+    pararLive();
+    fecharModal();
+    atualizarHUD();
+  });
+
+  // ===== Minigames =====
+  function atualizarMinigameInfo() {
+    const nome = minigameAtivo === "moedas" ? "Pega-moedas" : "Toque no alvo";
+    mgInfo.textContent = `${nome} · Tempo: ${mgTempo}s · Pontos: ${mgPontos}`;
+  }
+
+  function atualizarBotoesMini() {
+    mgMoedasBtn.disabled = minigameAtivo !== null;
+    mgAlvoBtn.disabled = minigameAtivo !== null;
+  }
+
+  function limparTimersMini() {
+    clearInterval(mgTimer);
+    clearInterval(mgSpawn);
+    clearInterval(mgMove);
+    mgTimer = null;
+    mgSpawn = null;
+    mgMove = null;
+  }
+
+  function iniciarMinigame(tipo) {
+    limparTimersMini();
+    minigameAtivo = tipo;
+    mgPontos = 0;
+    mgGanhos = 0;
+    mgTempo = tipo === "moedas" ? 20 : 15;
+    mgArea.innerHTML = "";
+    atualizarMinigameInfo();
+    atualizarBotoesMini();
+
+    mgTimer = setInterval(() => {
+      mgTempo -= 1;
+      atualizarMinigameInfo();
+      if (mgTempo <= 0) finalizarMinigame();
+    }, 1000);
+
+    if (tipo === "moedas") {
+      mgSpawn = setInterval(spawnMoeda, 600);
+      mgMove = setInterval(moverMoedas, 30);
+    } else {
+      mgSpawn = setInterval(spawnAlvo, 800);
+    }
+  }
+
+  function pararMinigame() {
+    limparTimersMini();
+    minigameAtivo = null;
+    mgArea.innerHTML = "";
+    atualizarBotoesMini();
+  }
+
+  function finalizarMinigame() {
+    const tipo = minigameAtivo;
+    limparTimersMini();
+    minigameAtivo = null;
+    mgArea.innerHTML = "";
+    mgInfo.textContent = tipo === "moedas"
+      ? `Fim! Você pegou ${mgPontos} moedas e ganhou ${mgGanhos} moedas.`
+      : `Fim! Você acertou ${mgPontos} alvos e ganhou ${mgGanhos} seguidores.`;
+    atualizarBotoesMini();
+    atualizarHUD();
+  }
+
+  function spawnMoeda() {
+    const moeda = document.createElement("div");
+    moeda.className = "item-mg";
+    moeda.textContent = "🪙";
+    moeda.style.left = (5 + Math.random() * 90) + "%";
+    moeda.style.top = "-40px";
+    moeda.dataset.y = "-40";
+    moeda.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      coletarMoeda(moeda);
+    });
+    mgArea.appendChild(moeda);
+  }
+
+  function moverMoedas() {
+    const altura = mgArea.clientHeight;
+    for (const moeda of mgArea.querySelectorAll(".item-mg")) {
+      const y = parseFloat(moeda.dataset.y) + 4;
+      moeda.dataset.y = y;
+      moeda.style.top = y + "px";
+      if (y > altura) moeda.remove();
+    }
+  }
+
+  function coletarMoeda(moeda) {
+    if (minigameAtivo !== "moedas") return;
+    const recompensa = 3 + equipamentos.teclado.nivel;
+    mgPontos += 1;
+    mgGanhos += recompensa;
+    moedas += recompensa;
+    tocar("moeda");
+    moeda.remove();
+    atualizarMinigameInfo();
+    atualizarHUD();
+  }
+
+  function spawnAlvo() {
+    const alvo = document.createElement("div");
+    alvo.className = "alvo-mg";
+    alvo.textContent = "🎯";
+    alvo.style.left = (10 + Math.random() * 80) + "%";
+    alvo.style.top = (15 + Math.random() * 70) + "%";
+    alvo.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      acertarAlvo(alvo);
+    });
+    mgArea.appendChild(alvo);
+    setTimeout(() => alvo.remove(), 1000);
+  }
+
+  function acertarAlvo(alvo) {
+    if (minigameAtivo !== "alvo") return;
+    mgPontos += 1;
+    mgGanhos += 1;
+    seguidores += 1;
+    tocar("seguidor");
+    alvo.remove();
+    atualizarMinigameInfo();
+    atualizarHUD();
+  }
+
+  mgMoedasBtn.addEventListener("click", () => iniciarMinigame("moedas"));
+  mgAlvoBtn.addEventListener("click", () => iniciarMinigame("alvo"));
+  btnMini.addEventListener("click", () => {
+    if (!modalAtual) {
+      tocar("clique");
+      abrirModal("minigamePainel");
+    }
+  });
+
+  // ===== HUD =====
+  function atualizarTextoGanho() {
+    if (tipoAtual) {
+      const g = calcularGanho();
+      const pct = Math.round(categorias[tipoAtual].interesse);
+      const local = localAtual() === "casa" ? "🏠 Casa" : "📱 Rua";
+      const pat = patrocinioAtivo ? ` · 🤝 ${patrocinios[patrocinioAtivo.chave].nome}` : "";
+      elGanho.textContent =
+        `${categorias[tipoAtual].nome} · ${local} · Público ${pct}% · +${g.seguidores} seguidores e +${g.moedas} moedas por ciclo${pat}`;
+    } else {
+      elGanho.textContent = "Comece uma live para ganhar seguidores e moedas";
+    }
+  }
+
+  function atualizarHUD() {
+    verificarNivel();
+
+    elSeguidores.textContent = seguidores;
+    elMoedas.textContent = moedas;
+
+    const n = nivelAtual();
+    elNivelNum.textContent = `${estaVerificado() ? "✅" : "⭐"} ${n.nivel}`;
+    const proximo = niveis[n.nivel];
+    elNivelFaltam.textContent = proximo ? `faltam ${proximo.seg - seguidores}` : "nível máximo";
+
+    const espectadores = aoVivo ? Math.max(1, Math.round(seguidores * 0.3)) : 0;
+    chatTopo.textContent = `${aoVivo ? "🔴 AO VIVO · " : ""}💬 Chat · 👀 ${espectadores}`;
+    chatTopo.style.color = aoVivo ? "#ff8a80" : "white";
+
+    atualizarTextoGanho();
+    atualizarLoja();
+    atualizarCategorias();
+  }
+
+  // ===== Controles =====
+  window.addEventListener("keydown", (e) => {
+    const tecla = e.key.toLowerCase();
+    if (["arrowup", "arrowdown", "arrowleft", "arrowright"].includes(tecla)) {
+      e.preventDefault();
+    }
+    if (tecla === "e" && !e.repeat) acao();
+    if (tecla === "m" && !e.repeat && !modalAtual) abrirModal("minigamePainel");
+    if (tecla === "escape" && modalAtual) fecharModal();
+    teclas[tecla] = true;
+  });
+
+  window.addEventListener("keyup", (e) => {
+    teclas[e.key.toLowerCase()] = false;
+  });
+
+  window.addEventListener("blur", zerarControles);
+
+  document.querySelectorAll("[data-dir]").forEach((botao) => {
+    const dir = botao.dataset.dir;
+    botao.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      controle[dir] = true;
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((evento) => {
+      botao.addEventListener(evento, () => {
+        controle[dir] = false;
+      });
+    });
+  });
+
+  // Girar a câmera arrastando o dedo (ou o mouse) na tela
+  renderer.domElement.addEventListener("pointerdown", (e) => {
+    arrastando = true;
+    ultimoX = e.clientX;
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!arrastando || modalAtual) return;
+    yaw -= (e.clientX - ultimoX) * 0.01;
+    ultimoX = e.clientX;
+  });
+  window.addEventListener("pointerup", () => { arrastando = false; });
+  window.addEventListener("pointercancel", () => { arrastando = false; });
+
+  btnAcao.addEventListener("click", () => {
+    tocar("clique");
+    acao();
+  });
+  document.querySelectorAll("[data-fechar]").forEach((b) => b.addEventListener("click", fecharModal));
+  document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  // Salvar ao sair da página
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) salvarJogo();
+  });
+  window.addEventListener("pagehide", salvarJogo);
+
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ===== Loop principal =====
+  let anterior = performance.now();
+  let tempo = 0;
+  let ultimoTexto = 0;
+
+  function loop(agora) {
+    const dt = Math.min((agora - anterior) / 1000, 0.05);
+    anterior = agora;
+    tempo += dt;
+
+    const andando = modalAtual ? false : moverJogador(dt);
+    animarBoneco(jogador, andando, tempo);
+    atualizarCamera(dt);
+    atualizarZona();
+
+    // Atualiza o texto de ganhos quando você muda de rua para casa
+    if (tempo - ultimoTexto > 0.5) {
+      atualizarTextoGanho();
+      ultimoTexto = tempo;
+    }
+
+    renderer.render(cena, camera);
+    requestAnimationFrame(loop);
+  }
+
+  // ===== Inicialização =====
+  criarCartoesLoja();
+  criarCartoesCategoria();
+  const carregou = carregarJogo();
+  aplicarCenario(cenarioAtual);
+  desenharEquipamentos();
+  adicionarChat(carregou ? "Bem-vindo de volta! 👋" : "Chat offline. Comece uma live!", "sistema");
+  if (carregou) mostrarAviso("Bem-vindo de volta! Seu progresso foi carregado.");
+  atualizarHUD();
+  if (!tutorialVisto) abrirTutorial();
+  setInterval(salvarJogo, 5000);
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>
